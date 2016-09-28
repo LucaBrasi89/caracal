@@ -5,7 +5,7 @@
 #        e-mail: andruha.sota@mail.ru
 #        --------------
 
-import random, requests, time, os
+import random, requests, time, os, argparse, re, sys
 from saumysql import Crud
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -13,113 +13,270 @@ from selenium.webdriver.common.proxy import *
 
 class Program_input:
 
-    request_quantity = 3 #Количество запросов к сайту
-    percent_of_direct_refer = 100 #Доля прямых переходов
-    URL_for_walk = ['http://progreso.com.ua/?p=1507',
-                    'http://progreso.com.ua/?p=1494',
-                    'http://progreso.com.ua/?p=1479',
-                    'http://progreso.com.ua/?p=1468',
-                    'http://progreso.com.ua/?p=1458',
-                    'http://progreso.com.ua/?p=1449',
-                    'http://progreso.com.ua/?p=1441',
-                    'http://progreso.com.ua/?p=1434',
-                    'http://progreso.com.ua/?p=1425',
-                    'http://progreso.com.ua/?p=1412',
-    ] #URL для прямых переходов
-    keywords = [] #ключевые слова
+    def __init__(self):
 
-    # диапазон интервалов для обращения к сайтам
-    interval_low_limit = 30 #минимальный предел
-    interval_upper_limit = 60  #максимальный предел
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--site', help='name of site for promoting. Simply, '
+                                           'without filename extension. For instance, '
+                                           ' write \'example\' instead of \'example.txt\'.')
+        args = parser.parse_args()
 
-    # user_agent_fields
-    user_agent=['Mozilla/5.0 (Windows NT 6.1; WOW64; rv:40.0) Gecko/20100101 Firefox/40.1',
-                'Mozilla/5.0 (X11; Linux i586; rv:31.0) Gecko/20100101 Firefox/31.0',
-                'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:49.0) Gecko/20100101 Firefox/49.0',
-                'Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; Trident/6.0)',
-                'Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko',
-                'Opera/12.0(Windows NT 5.2;U;en)Presto/22.9.168 Version/12.00',
-                'Opera/12.0(Windows NT 5.2;U;en)Presto/22.9.168 Version/12.00',
-                'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10.6; en-US; rv:1.9.2.13; ) Gecko/20101203'
-    ]
+        self.filename_noext = str(args.site) #Имя файла без расширения
+
+        self.parseConfig()
+        self.getURL()
+        self.getKeywords()
+        self.getUser_agents()
+
+
+
+    def parseConfig(self):
+
+        self.backToRootDir()
+
+        config_file = self.filename_noext + '.cfg'  # Добавим расширение
+        os.chdir('sites_for_promote')
+
+        f = open(config_file)
+
+        # пройдемся по файлу конфига и распарсим переменные
+        for line in f:
+
+            if (re.search(r'(?<=domain_name=).+?(?=$)', line)) != None:
+                self.domain_name = re.search(r'(?<=domain_name=).+?(?=$)',line).group()
+
+            elif (re.search(r'(?<=rqst_quantity=).+?(?=$)', line)) != None:
+                self.rqst_quantity = re.search(r'(?<=rqst_quantity=).+?(?=$)',line).group()
+                self.rqst_quantity = int(self.rqst_quantity)
+
+            elif (re.search(r'(?<=perct_of_drefer=).+?(?=$)', line)) != None:
+                self.perct_of_drefer = re.search(r'(?<=perct_of_drefer=).+?(?=$)',line).group()
+
+            elif (re.search(r'(?<=aver_page_tm=).+?(?=$)', line)) != None:
+                self.aver_page_tm = re.search(r'(?<=aver_page_tm=).+?(?=$)',line).group()
+
+            elif (re.search(r'(?<=deep_in_site=).+?(?=$)', line)) != None:
+                self.deep_in_site = re.search(r'(?<=deep_in_site=).+?(?=$)',line).group()
+
+            elif (re.search(r'(?<=update_links=).+?(?=$)', line)) != None:
+                self.update_links = re.search(r'(?<=update_links=).+?(?=$)',line).group()
+
+                # Если есть необходимость получить свежие ссылки, то будь добр, сделай
+                # для меня это...
+                if (int(self.update_links) == 1):
+                    self.updateLinks(self.filename_noext)
+
+            elif (re.search(r'(?<=threads=).+?(?=$)', line)) != None:
+                self.threads = re.search(r'(?<=threads=).+?(?=$)',line).group()
+
+            elif (re.search(r'(?<=interval_low_lim=).+?(?=$)', line)) != None:
+                self.interval_low_lim = re.search(r'(?<=interval_low_lim=).+?(?=$)',line).group()
+                self.interval_low_lim = int(self.interval_low_lim)
+
+            elif (re.search(r'(?<=interval_upper_lim=).+?(?=$)', line)) != None:
+                self.interval_upper_lim = re.search(r'(?<=interval_upper_lim=).+?(?=$)',line).group()
+                self.interval_upper_lim = int(self.interval_upper_lim)
+
+
+        f.close()
+
+
+    def updateLinks(self):
+
+        # запусти мне selenium. Отыщи все ссылки на странице. Вытащи оттуда href.
+        # Удали повторяющие ссылки из списка и запиши их в файл.
+
+        chromedriver = "/home/andrew/Загрузки/chromedriver"
+        os.environ["webdriver.chrome.driver"] = chromedriver
+        driver = webdriver.Chrome(chromedriver)
+        driver.get('http://progreso.com.ua/')
+        urls_raw=driver.find_elements_by_tag_name('a')
+        urls = []
+        for url in urls_raw:
+            urls.append(url.get_attribute('href'))
+
+        urls=set(urls)
+
+        driver.quit()
+
+        # откроем файл на запись
+        links = open('../url_db/{0}.url'.format(self.filename_noext), 'w')
+        i=0
+        for line in urls:
+            if (line.count('?') != 0):
+                links.write(line+'\n')
+                i=i+1
+        links.close()
+        print('Было записано {0:4} ссылок'.format(i))
+
+    # парсим URL из файла конфига. Добавляем им в self.URL_for_walk
+    def getURL(self):
+
+        links = open('../url_db/{0}.url'.format(self.filename_noext))
+        self.URL_for_walk = []
+        for line in links:
+            self.URL_for_walk.append(line)
+
+
+        links.close()
+
+    # парсим keywords из файла конфига. Добавляем им в self.keywords
+    def getKeywords(self):
+
+        self.backToRootDir()
+        os.chdir('sites_for_promote')
+
+        self.keywords = []
+        f = open(self.filename_noext+'.cfg')
+        # флаг начала записи в keywords
+        start=False
+        for line in f:
+
+
+            # если начался keyword - пиши-ка сразу в список
+            if start == True:
+                self.keywords.append(line.strip())
+
+            # если встретился keyword поменяй флаг
+            if line.count('<keywords>') != 0:
+
+                start = True
+             # закрывающий keyword? Выходи...
+            elif line.count('</keywords>') != 0:
+                break
+
+        f.close()
+
+        # мы случайно записали закрывающий тег. Удалим его потихому
+        self.keywords.pop()
+
+
+    # парсим user_agents из файла конфига. Добавляем им в self.user_agents
+    def getUser_agents(self):
+
+        self.backToRootDir()
+        os.chdir('sites_for_promote')
+
+        self.user_agents = []
+        f = open(self.filename_noext + '.cfg')
+        # флаг начала записи в user_agents
+        start = False
+        for line in f:
+
+            # если начался keyword - пиши-ка сразу в список
+            if start == True:
+                self.user_agents.append(line.strip())
+
+            # если встретился keyword поменяй флаг
+            if line.count('<user_agents>') != 0:
+
+                start = True
+                # закрывающий keyword? Выходи...
+            elif line.count('</user_agents>') != 0:
+                break
+
+        f.close()
+
+        # мы случайно записали закрывающий тег. Удалим его потихому
+        self.user_agents.pop()
+
+
+
+    def backToRootDir(self):
+
+        root_dir = (str(sys.argv[0]).split(os.path.basename(sys.argv[0])))[0]
+        os.chdir(root_dir)
+
 
 
 class GenParam(Program_input):
 
 
-    def __init__(self,driver):
+    def __init__(self,launch_way):
+
+        Program_input.__init__(self)
 
         # получим интервал
-        self.interval = random.randint(self.interval_low_limit, self.interval_upper_limit)
+        self.interval = random.randint(self.interval_low_lim, self.interval_upper_lim)
 
         # оформим user-agent
-        user_agent = random.choice(self.user_agent)
-        headers = {'User-Agent': user_agent}
+        self.user_agent = random.choice(self.user_agents)
+
 
         # получим URL к котрому будем обращаться
-        url = random.choice(self.URL_for_walk)
+        self.url = random.choice(self.URL_for_walk)
 
         # получаем прокси
         self.crud = Crud('localhost', 'andrew', 'andrew', 'proxy')
         self.crud.sql = ('SELECT ip_address, port FROM proxies ORDER BY RAND() LIMIT 1')
         result = self.crud.readAct()
         self.proxy = 'http://{0}:{1}'.format(result[0], result[1])
-        proxy = Proxy({
+        self.sel_proxy = Proxy({
                         'proxyType': ProxyType.MANUAL,
                         'httpProxy': self.proxy,
                         'noProxy':''
                        })
 
+
+        # определяем по какому пути идти
+        if launch_way == 0:
+            self.google_search()
+
+
+    def google_search(self):
+
         # делаем запрос к серверу
         try:
-            
-            driver.proxy = proxy
-            driver.implicitly_wait(30)
-            driver.get(url)
-            time.sleep(10)
-            driver.find_element_by_tag_name('body').send_keys(Keys.CONTROL+'t')
-            driver.find_element_by_tag_name('body').send_keys(Keys.CONTROL+'w')
-            
-            print('{0}\n{1}\n{2}\n_____'.format(url,self.proxy,headers))
+
+            chromedriver = "/home/andrew/Загрузки/chromedriver"
+            os.environ["webdriver.chrome.driver"] = chromedriver
+            driver = webdriver.Chrome(chromedriver)
+            driver.proxy = self.sel_proxy
+            driver.implicitly_wait(30+random.randint(5,40))
+            driver.get(self.url)
+            time.sleep(random.randint(10,25))
+            driver.find_element_by_tag_name('body').send_keys(
+                Keys.CONTROL + 't')
+            driver.find_element_by_tag_name('body').send_keys(
+                Keys.CONTROL + 'w')
+
+            print('{0}\n{1}\n{2}\n____'.format(self.url, self.proxy, self.user_agent))
+
+
 
         except EnvironmentError:
             print('FUCK!')
+
+        finally:
+            driver.quit()
+
+
+
 
 
 class Executor(Program_input):
 
     def __init__(self):
 
+        Program_input.__init__(self)
 
-        chromedriver = "/home/andrew/Загрузки/chromedriver"
-        os.environ["webdriver.chrome.driver"] = chromedriver
-        driver = webdriver.Chrome(chromedriver)
-        elapsed = 0
 
-        for request in range(self.request_quantity):
+        prev_iter=time.time()
+
+        for request in range(self.rqst_quantity):
             print('попытка № {0}'.format(request))
-            genObj = GenParam(driver)
+            genObj = GenParam(0)
             print('Ждем-с {0} секунд'.format(genObj.interval))
-            time.sleep(genObj.interval)
+            cur_iter = time.time()
+            elapsed = round(cur_iter - prev_iter)
             print('прошло времени {0:5} секунд'.format(elapsed))
-            elapsed = round(time.time() - elapsed)
-            
-            
-        driver.quit()
-
-
-
-
-
-
-
-
-
-
+            prev_iter = time.time()
+            time.sleep(genObj.interval)
 
 
 
 
 if __name__ == "__main__":
+
 
     Executor()
