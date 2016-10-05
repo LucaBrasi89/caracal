@@ -210,41 +210,104 @@ class GenParam(Program_input):
         self.crud = Crud('localhost', 'andrew', 'andrew', 'proxy')
         self.crud.sql = ('SELECT ip_address, port FROM proxies ORDER BY RAND() LIMIT 1')
         result = self.crud.readAct()
-        self.proxy = 'http://{0}:{1}'.format(result[0], result[1])
-        self.sel_proxy = Proxy({
-                        'proxyType': ProxyType.MANUAL,
-                        'httpProxy': self.proxy,
-                        'noProxy':''
-                       })
+        self.proxy = '{0}:{1}'.format(result[0], result[1])
 
+
+        launch_ways=range(0,2)
+
+        launch_way = random.choice(launch_ways)
 
         # определяем по какому пути идти
         if launch_way == 0:
-            self.google_search()
+            self.googleSearch()
 
+        elif launch_way ==1:
+            self.directWalk()
 
-    def google_search(self):
+    def googleSearch(self):
 
         # делаем запрос к серверу
-        try:
 
+        print('Это метод googleSearch')
+        try:
             chromedriver = "/home/andrew/Загрузки/chromedriver"
             os.environ["webdriver.chrome.driver"] = chromedriver
-            driver = webdriver.Chrome(chromedriver)
-            driver.proxy = self.sel_proxy
-            driver.implicitly_wait(30+random.randint(5,40))
+
+            # получим keywords
+            keyword = random.choice(self.keywords)
+
+            # заменим user_agent'a
+            chrome_options = webdriver.ChromeOptions()
+
+            chrome_options.add_argument(
+                "--user-agent={0}".format(self.user_agent))
+
+            driver = webdriver.Chrome(chromedriver,
+                                      chrome_options=chrome_options)
+
+            driver.get("http://google.com")
+
+            time.sleep(random.randint(1, 5))
+
+            search = driver.find_element_by_name('q')
+            search.send_keys("{0} site:progreso.com.ua".format(keyword))
+            search.send_keys(
+                Keys.RETURN)  # hit return after you enter search text
+            time.sleep(random.randint(4,12))  # sleep for 5 seconds so you can see the results
+
+            elem = driver.find_element_by_xpath('''.//*[@id='rso']/div/div[1]/div/h3/a ''')
+            elem.click()
+            time.sleep(random.randint(20, 31))
+
+            print('{0}\n{1}\n{2}\n____'.format(self.url, self.proxy,
+                                               self.user_agent))
+
+
+
+        except Exception:
+
+            print('FUCK!')
+
+        finally:
+            driver.quit()
+
+
+    def directWalk(self):
+
+        # делаем запрос к серверу
+        
+        print('Это метод directWalk')
+
+        try:
+            chromedriver = "/home/andrew/Загрузки/chromedriver"
+            os.environ["webdriver.chrome.driver"] = chromedriver
+
+            # заменим user_agent'a
+
+
+            # используем прокси
+            chrome_options = webdriver.ChromeOptions()
+            chrome_options.add_argument('--proxy-server={0}'.format(self.proxy))
+
+            chrome_options.add_argument("--user-agent={0}".format(self.user_agent))
+
+            driver = webdriver.Chrome(chromedriver,chrome_options=chrome_options)
+#            driver.get("http://www.whoishostingthis.com/tools/user-agent/")
+
+            time.sleep(random.randint(5,20))
             driver.get(self.url)
-            time.sleep(random.randint(10,25))
             driver.find_element_by_tag_name('body').send_keys(
                 Keys.CONTROL + 't')
             driver.find_element_by_tag_name('body').send_keys(
                 Keys.CONTROL + 'w')
+            time.sleep(random.randint(5,20))
 
             print('{0}\n{1}\n{2}\n____'.format(self.url, self.proxy, self.user_agent))
 
 
 
-        except EnvironmentError:
+        except Exception:
+
             print('FUCK!')
 
         finally:
