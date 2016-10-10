@@ -216,6 +216,7 @@ class GenParam(Program_input):
         launch_ways=range(0,2)
 
         launch_way = random.choice(launch_ways)
+#        launch_way = 0
 
         # определяем по какому пути идти
         if launch_way == 0:
@@ -233,8 +234,6 @@ class GenParam(Program_input):
             chromedriver = "/home/andrew/Загрузки/chromedriver"
             os.environ["webdriver.chrome.driver"] = chromedriver
 
-            # получим keywords
-            keyword = random.choice(self.keywords)
 
             # заменим user_agent'a
             chrome_options = webdriver.ChromeOptions()
@@ -245,22 +244,41 @@ class GenParam(Program_input):
             driver = webdriver.Chrome(chromedriver,
                                       chrome_options=chrome_options)
 
-            driver.get("http://google.com")
+            for tab in range(0,3):
 
-            time.sleep(random.randint(1, 5))
+                # Second Tab
+                driver.find_element_by_tag_name("body").send_keys(
+                    Keys.CONTROL + "t")
 
-            search = driver.find_element_by_name('q')
-            search.send_keys("{0} site:progreso.com.ua".format(keyword))
-            search.send_keys(
-                Keys.RETURN)  # hit return after you enter search text
-            time.sleep(random.randint(4,12))  # sleep for 5 seconds so you can see the results
 
-            elem = driver.find_element_by_xpath('''.//*[@id='rso']/div/div[1]/div/h3/a ''')
-            elem.click()
-            time.sleep(random.randint(20, 31))
+            for handle in driver.window_handles:
 
-            print('{0}\n{1}\n{2}\n____'.format(self.url, self.proxy,
-                                               self.user_agent))
+                driver.switch_to_window(handle)
+                try:
+                    # получим keywords
+                    keyword = random.choice(self.keywords)
+                    driver.get("http://google.com")
+                    # задержка перед поиском
+                    time.sleep(random.randint(3, 10))
+                    search = driver.find_element_by_name('q')
+                    search.send_keys("{0} site:progreso.com.ua".format(keyword))
+                    search.send_keys(
+                        Keys.RETURN)  # hit return after you enter search text
+                    time.sleep(random.randint(4,12))  # sleep for 5 seconds so you can see the results
+
+                    elem = driver.find_element_by_xpath('''.//*[@id='rso']/div/div[1]/div/h3/a''')
+                    elem.click()
+                    # подождем на странице еще. Куда нам торопиться?
+                    time.sleep(random.randint(20, 62))
+                    print('{0}\n{1}\n{2}\n____'.format(self.url, self.proxy,
+                                                       self.user_agent))
+                    driver.find_element_by_tag_name('body').send_keys(
+                        Keys.CONTROL + 'w')
+
+                except Exception:
+
+                    print('Одна итерация уже прошла')
+
 
 
 
