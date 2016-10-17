@@ -5,7 +5,7 @@
 #        e-mail: andruha.sota@mail.ru
 #        --------------
 
-import random, requests, time, os, argparse, re, sys
+import random, requests, time, os, argparse, re, sys, subprocess
 from saumysql import Crud
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -27,7 +27,6 @@ class Program_input:
         self.getURL()
         self.getKeywords()
         self.getUser_agents()
-
 
 
     def parseConfig(self):
@@ -187,6 +186,59 @@ class Program_input:
         root_dir = (str(sys.argv[0]).split(os.path.basename(sys.argv[0])))[0]
         os.chdir(root_dir)
 
+    # получаем список рабочих столов и текущий рабочий стол.
+    # Должна быть установлена утилита wmctrl!
+    # дает такой выхлоп:
+    # 0  * DG: 1920x1080  VP: 0,0  WA: 0,0 1920x1053  1
+    # 1  - DG: 1920x1080  VP: N/A  WA: 0,0 1920x1053  2
+
+    def getDesktops(self):
+
+        raw_output = subprocess.check_output('wmctrl -d',shell=True,
+                                             universal_newlines=True)
+        # разберем вывод построчно
+        raw_output = raw_output.split('\n')
+        # общее количество рабочих столов
+        self.screens = []
+        # текущий рабочий стол
+        self.cur_screen = None
+        for line in raw_output:
+            try:
+                screen = re.search(r'^.', line)
+                self.screens.append(screen.group())
+                cur_screen = re.search(r'^.(?=.*?\*)', line)
+                self.cur_screen = cur_screen.group()
+            except AttributeError:
+                print('there is not group attr here...')
+
+
+    # ищет неактивные рабочие столы и переключаеться на один из них
+    def toggleDesktop(self):
+
+        # получаем список рабочих столов
+        self.getDesktops()
+        # оформим множества для более удобной работы
+        all_screens = set(self.screens)
+        cur_screen = set([self.cur_screen])
+        # получим список всех экранов кроме активного
+        not_cur_screens = list(all_screens - cur_screen)
+        # экран который не активный, на который можно переключиться
+        choiced_screen = random.choice(not_cur_screens)
+        print('{0} - экран на который переключимся '.format(choiced_screen))
+
+        # собственно процесс переключения
+        subprocess.call('wmctrl -s {0}'.format(choiced_screen),shell=True)
+
+
+    # возвращает на рабочий стол который только что покинули
+    def goToPrevDesktop(self):
+
+        # задержка перед возвратом
+        delay = 1
+        time.sleep(delay)
+        # собственно процесс переключения
+        subprocess.call('wmctrl -s {0}'.format(self.cur_screen), shell=True)
+
 
 
 class GenParam(Program_input):
@@ -230,16 +282,20 @@ class GenParam(Program_input):
         # делаем запрос к серверу
 
         print('Это метод googleSearch')
+
+
         try:
             chromedriver = "/home/andrew/Загрузки/chromedriver"
             os.environ["webdriver.chrome.driver"] = chromedriver
 
-
+            # переключение на свободный экран!
+            self.toggleDesktop()
             # заменим user_agent'a
             chrome_options = webdriver.ChromeOptions()
 
             chrome_options.add_argument(
                 "--user-agent={0}".format(self.user_agent))
+
 
             driver = webdriver.Chrome(chromedriver,
                                       chrome_options=chrome_options)
@@ -250,6 +306,7 @@ class GenParam(Program_input):
                 driver.find_element_by_tag_name("body").send_keys(
                     Keys.CONTROL + "t")
 
+            self.goToPrevDesktop()
 
             for handle in driver.window_handles:
 
@@ -296,6 +353,7 @@ class GenParam(Program_input):
         
         print('Это метод directWalk')
 
+
         try:
             chromedriver = "/home/andrew/Загрузки/chromedriver"
             os.environ["webdriver.chrome.driver"] = chromedriver
@@ -309,11 +367,18 @@ class GenParam(Program_input):
 
             chrome_options.add_argument("--user-agent={0}".format(self.user_agent))
 
-            driver = webdriver.Chrome(chromedriver,chrome_options=chrome_options)
-#            driver.get("http://www.whoishostingthis.com/tools/user-agent/")
+            # переключение на свободный экран!
+            self.toggleDesktop()
 
+            driver = webdriver.Chrome(chromedriver,chrome_options=chrome_options)
+
+            # переключение обратно!
+            self.goToPrevDesktop()
             time.sleep(random.randint(5,20))
+
             driver.get(self.url)
+
+
             driver.find_element_by_tag_name('body').send_keys(
                 Keys.CONTROL + 't')
             driver.find_element_by_tag_name('body').send_keys(
@@ -358,6 +423,5 @@ class Executor(Program_input):
 
 
 if __name__ == "__main__":
-
 
     Executor()
